@@ -1,0 +1,7 @@
+USER = ""
+PASSWORD = ""
+
+DROPBOX_TOKEN = ""
+
+DB_PATH = ""
+COURSES = []
