@@ -1,4 +1,5 @@
-'''Util module.'''
+"""Util module."""
+
 
 class Colors:
     BOLD = '\033[1m'

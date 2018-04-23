@@ -1,3 +1,10 @@
-secrets.py
-logs/
+# Python
+__pycache__/
+
+# VSCode
+.vscode/
+
+# Project
 _other/
+logs/
+secrets.py
