@@ -9,8 +9,13 @@ requests = "*"
 pyyaml = "*"
 dropbox = "*"
 "flake8" = "*"
+click = "*"
 
 [dev-packages]
+black = "*"
 
 [requires]
 python_version = "3.6"
+
+[pipenv]
+allow_prereleases = true

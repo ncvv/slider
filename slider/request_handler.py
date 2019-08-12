@@ -1,19 +1,9 @@
 """Handler module for requests and user specific configuration data."""
 
-# import os
-# import json
 import re
 import sys
 
 import requests
-
-try:
-    from secrets import USER, PASSWORD, DROPBOX_TOKEN, PATH_IN_DB, COURSES  # , PATH_TO_DB
-except ImportError:
-    with open('secrets.py', 'w') as secfile:
-        secfile.write('USER = \'\'\nPASSWORD = \'\'\n\nDROPBOX_TOKEN = \'\'\n\nPATH_TO_DB = \'\'\nPATH_IN_DB = \'\'\nCOURSES = []')
-    print('File secrets.py was missing and thus created.')
-    sys.exit(1)
 
 # Url for accessing Ilias
 ILIAS_URL = 'https://cas.uni-mannheim.de/cas/login?service=https%3A%2F%2Filias.uni-mannheim.de%2Filias.php%3FbaseClass%3DilPersonalDesktopGUI%26cmd%3DjumpToSelectedItems'
@@ -22,19 +12,13 @@ ILIAS_URL = 'https://cas.uni-mannheim.de/cas/login?service=https%3A%2F%2Filias.u
 class RequestHandler:
     """Handler Class for the HTTP requests."""
 
-    def __init__(self):
+    def __init__(self, user, password):
         self.session = requests.Session()
-
-        self.username = USER
-        self.password = PASSWORD
-        self.token = DROPBOX_TOKEN
-
-        if not self.username or not self.password or not self.token:
-            print('Maintain keys in secrets.py first.')
+        self.username = user
+        self.password = password
+        if not self.username or not self.password:
+            print('Maintain credentials in secrets.py first.')
             sys.exit(1)
-
-        self.course_names = COURSES
-        self.path = PATH_IN_DB
 
     def get_request(self):
         """HTTP GET request for getting cookies."""
