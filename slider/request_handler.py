@@ -11,7 +11,6 @@ ILIAS_URL = 'https://cas.uni-mannheim.de/cas/login?service=https%3A%2F%2Filias.u
 
 class RequestHandler:
     """Handler Class for the HTTP requests."""
-
     def __init__(self, user, password):
         self.session = requests.Session()
         self.username = user

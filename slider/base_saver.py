@@ -1,14 +1,11 @@
+import util
+
 from abc import ABC, abstractmethod
 
 
 class BaseSaver(ABC):
-
     def __init__(self, base_path):
-        if not base_path.startswith('/'):
-            base_path = '/' + base_path
-        if not base_path.endswith('/'):
-            base_path = base_path + '/'
-        self.base_path = base_path
+        self.base_path = util.bpath(base_path)
 
     @abstractmethod
     def exists(self, relative_path):
@@ -21,6 +18,6 @@ class BaseSaver(ABC):
         pass
 
     @abstractmethod
-    def save_file(self, relative_path, content, *args):
+    def save_file(self, relative_path, content):
         """Save the file."""
         pass

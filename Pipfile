@@ -10,9 +10,11 @@ pyyaml = "*"
 dropbox = "*"
 "flake8" = "*"
 click = "*"
+yapf = "*"
+tinydb = "*"
 
 [dev-packages]
-black = "*"
+yapf = "*"
 
 [requires]
 python_version = "3.6"
