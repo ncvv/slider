@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 
 
 class BaseSaver(ABC):
+    """"""
     def __init__(self, base_path):
         self.base_path = util.bpath(base_path)
 

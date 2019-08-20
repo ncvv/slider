@@ -4,8 +4,6 @@ import re
 import sys
 
 
-
-
 class Colors:
     BOLD = '\033[1m'
     LIGHTGREY = '\033[37m'
@@ -17,12 +15,13 @@ class Colors:
     ENDC = '\033[0m'
 
 
-def create_secrets_file():
+# CLI utils
+def create_secrets():
     """Create secrets file with required configuration."""
     with open('secrets.py', 'w') as secfile:
         ## if not token
         secfile.write((
-            '# _Credentials: Maintain your credentials below. Do not remove fields you don\'t need.'
+            '# _Credentials: Maintain your credentials below. Do not remove unused fields.'
             'USER = \'\'\nPASSWORD = \'\'\n# _: Define which courses should be crawled\nCOURSES = []\n\n'
             '# Local: Required if you want to download files and store them in a local folder'
             ' (for example in the Dropbox client folder)\n'
@@ -34,8 +33,10 @@ def create_secrets_file():
     sys.exit(1)
 
 
+# Crawler utils
 def course_contains(original, courses):
-    """Check in the config data whether the user wants to download content for this course."""
+    """Check in the config data whether the user
+       wants to download content for this course."""
     for name in courses:
         compiler = re.compile(name)
         if compiler.search(original) is not None:
@@ -53,6 +54,7 @@ def remove_edge_characters(line):
     return parsed
 
 
+# Path utils
 def bpath(path):
     """Returns valid base path of the form: /path/to/folder/ ."""
     if not path.startswith('/'):
@@ -76,15 +78,3 @@ def dbpath(path):
     if path.endswith('/'):
         path = path[:-1]
     return path
-
-
-"""def hashe(content):
-
-    hasher = DropboxContentHasher()
-    while len(content)
-        while True:
-            chunk = f.read(1024)
-            if len(chunk) == 0:
-                break
-            hasher.update(chunk)
-    return hasher.hexdigest()"""

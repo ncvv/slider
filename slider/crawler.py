@@ -6,40 +6,42 @@ import re
 import sys
 import hashlib
 import mimetypes
+import shutil
 from datetime import datetime
 
 import click
-import requests
 from requests.exceptions import ConnectionError
 from bs4 import BeautifulSoup
 
 import util
 from util import Colors as clr
-from file_saver import FileSaver
-from drop_saver import DropboxSaver
+from save_file import FileSaver
+from save_drop import DropboxSaver
 from request_handler import RequestHandler
-from data import Database
+from database import Database
 
-
+SECRETS_FILE = 'secrets.py'
 CHLOG_FOLDER = '.changelog/'
-
 
 try:
     import secrets
 except ImportError:
     if not os.path.exists('secrets.py'):
-        util.create_secrets_file()
+        util.create_secrets()
     else:
-        print('Secrets file exists but it is malformed. '
-              'Consider to remove it and start over or figure out what is missing.')
+        print('Secrets is malformed. Start over.')
+        shutil.rm('secrets.py')
+        sys.exit(1)
 
 
 class Crawler:
     """A crawler for downloading university e-learning content."""
-    def __init__(self, dropbox, maxsize, logall):
+    def __init__(self, comphash, dropbox, logall, mail, maxsize):
+        self.comphash = comphash
         self.dropbox = dropbox
-        self.maxsize = maxsize
         self.logall = logall
+        self.sendmail = mail
+        self.maxsize = maxsize
 
         if self.dropbox:
             self.save_path = secrets.PATH_IN_DB
@@ -67,23 +69,38 @@ class Crawler:
                 self.save_path, clr.ENDC)
 
     def run(self):
-        """Loop through top level courses and crawl the content for every course."""
+        """Main entry point."""
         try:
-            response = self.req.post_request()
+            response = self.req.login()
+            html_text = response.text
         except ConnectionError as err:
             sys.stderr.write('{}\n\n{}\n'.format(
-                err, 'A ConnectionError occurred. '
-                'Please check your internet connection.'))
+                err, 'A ConnectionError occurred. Please check your internet connection.'))
             sys.exit(1)
 
-        html_text = response.text
-        # Has to be done this way since http response on failed auth is 200 - OK.
-        if 'Anmeldedaten wurden nicht akzeptiert' in html_text:
-            sys.stderr.write('Authorization @CAS failed.\n'
-                             'Please maintain user and password correctly.\n')
+        # Has to be done this way since HTTP response
+        # on failed authentication is 200 - OK.
+        auth_failed_msg = 'Anmeldedaten wurden nicht akzeptiert'
+        if auth_failed_msg in html_text:
+            sys.stderr.write(
+                'Authorization failed. Please maintain user and password correctly.\n')
             sys.exit(1)
 
+        # Crawl courses
+        self.crawl(html_text)
+
+        # Wrap up and finish program
+        # Close database, write changelog and send mail
+        self.database.close(self.file_handler, self.dropbox, True)
+        self.write_changelog()
+        if self.sendmail and self.count > 0:
+            self.req.send_mail(self, self.downloads, self.count)
+        print(self)
+
+    def crawl(self, html_text):
+        """Loop through top level courses and crawl the content for every course."""
         soup_courses = BeautifulSoup(html_text, 'html.parser')
+
         for soup_course in soup_courses.findAll('a', {'class': 'il_ContainerItemTitle'}):
             course_name = util.course_contains(soup_course.string, self.courses)
             relative_link = soup_course.get('href')
@@ -95,12 +112,8 @@ class Crawler:
                 print('{}No download requested for course >> {}{}'.format(
                     clr.BOLD, clr.ENDC, soup_course.string.lstrip()))
 
-        self.database.close(self.file_handler, self.dropbox, True)
-        self.write_changelog()
-        print(self)
-
     def crawl_course(self, course_url, folder_path):
-        """CRecursively call this method until there is something to download
+        """Recursively call this method until there is something to download
            for this course in the respective path."""
         html_text_course = self.req.session.get(course_url).text
         soup_course = BeautifulSoup(html_text_course, 'html.parser')
@@ -117,15 +130,21 @@ class Crawler:
                     link = soup_line.get('href')
                 else:
                     continue
-                item_properties = container.find('div',
-                                                 {'class': 'ilListItemSection il_ItemProperties'})
+                item_properties = container.find(
+                    'div', {'class': 'ilListItemSection il_ItemProperties'})
                 if item_properties is not None:
                     item_prop = item_properties.find_all('span', {'class', 'il_ItemProperty'})
                     properties = [
-                        prop.string.strip().split() for prop in item_prop if prop.string is not None
+                        prop.string.strip().split() for prop in item_prop
+                        if prop.string is not None
                     ]
                     if properties:
                         file_ending = properties[0][0]
+                        last_update = properties[0][2]
+                        d = datetime.strptime(last_update, '%d. %b %Y, %H:%M')
+                        # 22. May 2019, 14:15 ->2019-05-22 14:15:00
+                        last_update = d.strftime('%Y%m%d%H%M')
+                        # 201905221415
 
                 if 'download' in link:
                     self.file_handler.create_folder(folder_path)
@@ -134,7 +153,8 @@ class Crawler:
                     parsed = util.remove_edge_characters(soup_line.string)
                     if not parsed:
                         self.removed_label_flag = True
-                    self.crawl_course('https://ilias.uni-mannheim.de/' + link, folder_path + parsed)
+                    self.crawl_course('https://ilias.uni-mannheim.de/' + link,
+                                      folder_path + parsed)
         else:
             print('{}no_files_in: {}{}'.format(clr.LIGHTGREY, str(folder_path), clr.ENDC))
 
@@ -151,7 +171,8 @@ class Crawler:
         if file_ending:
             relative_path += file_ending
         else:
-            relative_path += str(mimetypes.guess_extension(http_header.headers['content-type']))
+            relative_path += str(mimetypes.guess_extension(
+                http_header.headers['content-type']))
 
         msg = {'clrone': clr.ENDC, 'clrtwo': clr.ENDC, 'method': '--', 'messag': relative_path}
         content = self.req.session.get(url).content
@@ -171,7 +192,8 @@ class Crawler:
                 msg['clrone'] = clr.BOLD
                 msg['method'] = 'downloading'
                 msg['messag'] = '{} from {}'.format(relative_path, url)
-        method = '{}{}:{} {}'.format(msg['clrone'], msg['method'], msg['clrtwo'], msg['messag'])
+        method = '{}{}:{} {}'.format(msg['clrone'], msg['method'], msg['clrtwo'],
+                                     msg['messag'])
         if msg['method'] == 'download' or self.logall:
             self.changelog.append('{}: {}'.format(msg['method'], msg['messag']))
         print(method)
@@ -190,18 +212,31 @@ class Crawler:
 @click.option('-d',
               '--dropbox',
               is_flag=True,
-              help='Upload files using the Dropbox API. Requires a Dropbox API token.')
-@click.option('-m',
-              '--maxsize',
-              default=5E7,
-              help='Define the maximum allowed size of a file to be downloaded.')
+              help='Upload files using the Dropbox API.'
+              ' Requires a Dropbox API token.')
+@click.option('-c',
+              '--comphash',
+              is_flag=True,
+              help='Compare downloaded files by their sha1 hashvalue. '
+              'Use this if you intend to . '
+              'The performance will be worse because every file has'
+              ' to be downloaded to compute its hashvalue.')
 @click.option('-l',
               '--logall',
               is_flag=True,
               help='Log everything to the changelog, not just downloads.')
-def cli(dropbox, maxsize, logall):
+@click.option('-m', '--mail', is_flag=True, help='Send an email if there are new downloads.')
+@click.option('--maxsize',
+              default=5E7,
+              help='Define the maximum size of a file to be downloaded.')
+@click.option('-s',
+              '--store',
+              is_flag=True,
+              help='Store credentials (in plaintext).'
+              ' Can also be used to overwrite stored information.')
+def cli(comphash, dropbox, logall, mail, maxsize, store):
+    crawler = Crawler(comphash, dropbox, logall, mail, maxsize)
     try:
-        crawler = Crawler(dropbox, maxsize, logall)
         crawler.run()
     except KeyboardInterrupt as kie:
         sys.stderr.write('{}\n\n {}{}KeyboardInterrupt. Crawler terminated.{}\n'.format(
