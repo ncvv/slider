@@ -1,3 +1,5 @@
+""""""
+
 import util
 
 from abc import ABC, abstractmethod
@@ -17,7 +19,7 @@ class BaseSaver(ABC):
 
     @abstractmethod
     def create_folder(self, relative_path):
-        """Creating a folder at the given path."""
+        """Create a folder at the given path."""
         pass
 
     @abstractmethod

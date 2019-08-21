@@ -1,5 +1,6 @@
-import os
+""""""
 
+import os
 import shutil
 
 from tinydb import TinyDB, Query
@@ -11,6 +12,7 @@ DATABASE_PATH = DATABASE_FOLDER + 'files.json'
 
 
 class Database:
+    """"""
     def __init__(self, file_handler, dropbox):
         curr = util.bpath(os.getcwd())
         self.db_folder_path = curr + DATABASE_FOLDER
@@ -42,17 +44,17 @@ class Database:
         """"""
         if not os.path.exists(self.db_folder_path):
             os.makedirs(self.db_folder_path)
-        # Database does not exist yet
+        # database does not exist yet
         if not file_handler.exists(DATABASE_PATH):
             file_handler.create_folder(DATABASE_FOLDER)
-        # Database exists
+        # database exists
         else:
-            # Database is saved in Dropbox
-            # Download it to working dir
+            # database is saved in Dropbox
+            # download it to working dir
             if dropbox:
                 file_handler.download_file(DATABASE_PATH, self.db_path)
-            # Database file is saved locally
-            # Copy it to working dir
+            # database file is saved locally
+            # copy it to working dir
             else:
                 src = file_handler.base_path + DATABASE_PATH
                 shutil.copyfile(src, self.db_path)
@@ -63,8 +65,8 @@ class Database:
         if regular:
             if dropbox:
                 with open(self.db_path, 'rb') as f:
-                    file_handler.save_file(DATABASE_PATH, f.read(), overwrite=True)
+                    file_handler.save_file(DATABASE_PATH, f.read(), mute=True, overwrite=True)
             else:
                 dest = file_handler.base_path + DATABASE_PATH
                 shutil.copyfile(self.db_path, dest)
-        os.remove(self.db_path)
+        shutil.rmtree(self.db_folder_path)

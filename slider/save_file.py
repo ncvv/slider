@@ -1,8 +1,10 @@
+""""""
+
 import os
 import shutil
 
-import util
 from save_base import BaseSaver
+import util
 
 
 class FileSaver(BaseSaver):
@@ -23,12 +25,14 @@ class FileSaver(BaseSaver):
 
     def save_file(self, relative_path, content, overwrite=False):
         """Save the file locally."""
-        if self.exists(relative_path) and not overwrite:
-            from_path = self.base_path + util.rpath(relative_path)
-            to_path = self.base_path + util.rpath(BaseSaver.OVERW_FOLDER + relative_path)
-            shutil.move(from_path, to_path)
-
         path = self.base_path + util.rpath(relative_path)
+
+        # move file instead of overwriting it
+        if self.exists(relative_path) and not overwrite:
+            to = self.base_path + util.rpath(BaseSaver.OVERW_FOLDER + relative_path)
+            shutil.move(path, to)
+
+        # save file
         with open(path, 'wb') as file:
             try:
                 file.write(content)

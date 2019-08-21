@@ -1,13 +1,16 @@
 """Handler module for requests and user specific configuration data."""
 
+from datetime import datetime
 import re
 import smtplib
-from datetime import datetime
+import urllib.parse
 
 import requests
 
-# Url for accessing Ilias
-ILIAS_URL = 'https://cas.uni-mannheim.de/cas/login?service=https%3A%2F%2Filias.uni-mannheim.de%2Filias.php%3FbaseClass%3DilPersonalDesktopGUI%26cmd%3DjumpToSelectedItems'
+# URL for accessing Ilias
+ILIAS_URL = 'https://cas.uni-mannheim.de/cas/login?' \
+            'service=https://ilias.uni-mannheim.de/ilias.php?' \
+            'baseClass=ilPersonalDesktopGUI&cmd=jumpToSelectedItems'
 
 
 class RequestHandler:
@@ -37,14 +40,15 @@ class RequestHandler:
             '_eventId': 'submit',
             'submit': 'Anmelden'
         }
-        response = self.session.post(ILIAS_URL, data=payload, cookies=cookies)
+        url = urllib.parse.quote_plus(ILIAS_URL)
+        response = self.session.post(url, data=payload, cookies=cookies)
         return response
 
-    def send_mail(self, subject, new_lst, newlen):
+    def send_mail(self, subject, new_lst):
         """Send an email via Uni Mannheim smtp server.
            Content of the mail in new_lst is every
            new academic record since last run of the program."""
-        # Mail headers
+        # mail headers
         headers = {
             'Content-Type': 'text/plain; charset=utf-8',
             'Content-Disposition': 'inline',
@@ -55,14 +59,14 @@ class RequestHandler:
             'Subject': str(subject)
         }
 
-        # Mail content
+        # mail content
         message = ''
         for h, v in headers.items():
             message += '{}: {}\n'.format(h, v)
         recs_new = '\n'.join(map(str, new_lst))
         message += '\n{}\n'.format(recs_new)
 
-        # Send email
+        # send email
         server = smtplib.SMTP('smtp.mail.uni-mannheim.de', 587)
         server.starttls()
         server.login(self.mail, self.password)
