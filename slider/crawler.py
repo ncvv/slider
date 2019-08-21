@@ -17,27 +17,26 @@ import util
 from util import Colors as clr
 from save_file import FileSaver
 from save_drop import DropboxSaver
-from request_handler import RequestHandler
+from request import RequestHandler
 from database import Database
 
-SECRETS_FILE = 'secrets.py'
+SECRETS_FILE = 'app_secrets.py'
 CHLOG_FOLDER = '.changelog/'
 
 try:
-    import secrets
+    import app_secrets as secrets
 except ImportError:
-    if not os.path.exists('secrets.py'):
-        util.create_secrets()
+    if not os.path.exists(SECRETS_FILE):
+        util.create_secrets(SECRETS_FILE)
     else:
         print('Secrets is malformed. Start over.')
-        shutil.rm('secrets.py')
+        shutil.rm(SECRETS_FILE)
         sys.exit(1)
 
 
 class Crawler:
     """A crawler for downloading university e-learning content."""
-    def __init__(self, comphash, dropbox, logall, mail, maxsize):
-        self.comphash = comphash
+    def __init__(self, dropbox, logall, mail, maxsize):
         self.dropbox = dropbox
         self.logall = logall
         self.sendmail = mail
@@ -57,16 +56,17 @@ class Crawler:
         self.courses = secrets.COURSES
         self.removed_label_flag = False
         self.count = 0
-        self.downloads = []
         self.changelog = []
 
     def __str__(self):
         if not self.count:
-            return '{}Files were already up to date.{}'.format(clr.BOLD, clr.ENDC)
+            return 'Files were already up to date.'
         else:
-            return '{}{}{} new file{} downloaded from ILIAS to {}.{}'.format(
-                clr.BOLD, clr.GREEN, str(self.count), ('s' if self.count != 1 else ''),
-                self.save_path, clr.ENDC)
+            s = 's' if self.count != 1 else ''
+            d = 'DROPBOX/' if self.dropbox else ''
+            p = d + self.save_path
+            restr = '{} new file{} downloaded from ILIAS to {}.'.format(str(self.count), s, p)
+            return restr
 
     def run(self):
         """Main entry point."""
@@ -94,8 +94,13 @@ class Crawler:
         self.database.close(self.file_handler, self.dropbox, True)
         self.write_changelog()
         if self.sendmail and self.count > 0:
-            self.req.send_mail(self, self.downloads, self.count)
-        print(self)
+            self.req.send_mail(self, self.changelog, self.count)
+
+        # Print crawler object with statistic
+        clrone = clr.BOLD
+        clrtwo = clr.GREEN if self.count else clr.ENDC
+        clrend = clr.ENDC
+        print(clrone, clrtwo, self, clrend, sep='')
 
     def crawl(self, html_text):
         """Loop through top level courses and crawl the content for every course."""
@@ -109,8 +114,7 @@ class Crawler:
             if course_name is not None:
                 self.crawl_course(course_url, course_name + '/')
             else:
-                print('{}No download requested for course >> {}{}'.format(
-                    clr.BOLD, clr.ENDC, soup_course.string.lstrip()))
+                print(clr.BOLD, 'No download requested for course >> ', clr.ENDC, soup_course.string.lstrip(), sep='')
 
     def crawl_course(self, course_url, folder_path):
         """Recursively call this method until there is something to download
@@ -121,7 +125,7 @@ class Crawler:
 
         if containers:
             if not self.removed_label_flag:
-                print('folder_path: ' + folder_path)
+                util.print_method('folder_path', folder_path)
 
             for container in containers:
                 file_ending = ''
@@ -135,12 +139,12 @@ class Crawler:
                 if item_properties is not None:
                     item_prop = item_properties.find_all('span', {'class', 'il_ItemProperty'})
                     properties = [
-                        prop.string.strip().split() for prop in item_prop
+                        str(prop.string.strip()) for prop in item_prop
                         if prop.string is not None
                     ]
                     if properties:
-                        file_ending = properties[0][0]
-                        last_update = properties[0][2]
+                        file_ending = properties[0]
+                        last_update = properties[2]
                         d = datetime.strptime(last_update, '%d. %b %Y, %H:%M')
                         # 22. May 2019, 14:15 ->2019-05-22 14:15:00
                         last_update = d.strftime('%Y%m%d%H%M')
@@ -148,7 +152,7 @@ class Crawler:
 
                 if 'download' in link:
                     self.file_handler.create_folder(folder_path)
-                    self.prepare_saving(folder_path, soup_line.string, file_ending, link)
+                    self.check_save(folder_path, soup_line.string, file_ending, last_update, link)
                 else:
                     parsed = util.remove_edge_characters(soup_line.string)
                     if not parsed:
@@ -156,47 +160,62 @@ class Crawler:
                     self.crawl_course('https://ilias.uni-mannheim.de/' + link,
                                       folder_path + parsed)
         else:
-            print('{}no_files_in: {}{}'.format(clr.LIGHTGREY, str(folder_path), clr.ENDC))
+            util.print_method('no_files_in', str(folder_path))
 
-    def prepare_saving(self, folder_path, filename, file_ending, url):
+    def check_save(self, folder_path, filename, file_ending, last_update, url):
         """Prepare the file to be saved. Remove edge characters, trim and add the correct file ending."""
         # Remove edge characters and trim
         filename = re.sub(r'[&]', 'and', filename)
         filename = re.sub(r'[!@#$/\:;*?<>|]', '', filename).strip()
 
-        http_header = self.req.session.head(url, headers={'Accept-Encoding': 'identity'})
-        file_size = http_header.headers['content-length']
-        relative_path = folder_path + filename + '.'
+        http = self.req.session.head(url, headers={'Accept-Encoding': 'identity'})
+        file_size = http.headers['content-length']
+        if not file_ending:
+            file_ending = str(mimetypes.guess_extension(http.headers['content-type']))
 
-        if file_ending:
-            relative_path += file_ending
-        else:
-            relative_path += str(mimetypes.guess_extension(
-                http_header.headers['content-type']))
+        relative_file = folder_path + filename
+        relative_path = relative_file + '.' + file_ending
+        msg = {'clrone': clr.ENDC, 'clrtwo': clr.ENDC, 'method': '--', 'message': relative_path}
 
-        msg = {'clrone': clr.ENDC, 'clrtwo': clr.ENDC, 'method': '--', 'messag': relative_path}
-        content = self.req.session.get(url).content
-        content_hash = hashlib.sha1(content).hexdigest()
-        already_exists = self.database.get(content_hash)
-        if float(file_size) >= self.maxsize:  # Skip # 2E8: 200.000.000 Bytes; 5E7: 30 MB
+        res = self.database.get_name_update(relative_path, last_update)
+        # Example file sizes 2E8: 200.000.000 Bytes; 5E7: 30 MB
+        if float(file_size) >= self.maxsize:  # Skip
             msg['clrone'] = clr.BLUE
             msg['method'] = 'file_skiped'
-        elif already_exists:  # self.file_handler.exists(relative_path):  # Exists
-            msg['method'] = 'file_exists'
-        else:  # Download
-            saved = self.file_handler.save_file(relative_path, content)
-            if saved:
-                self.database.insert(relative_path, content_hash)
-                self.downloads.append(relative_path)
-                self.count += 1
-                msg['clrone'] = clr.BOLD
-                msg['method'] = 'downloading'
-                msg['messag'] = '{} from {}'.format(relative_path, url)
-        method = '{}{}:{} {}'.format(msg['clrone'], msg['method'], msg['clrtwo'],
-                                     msg['messag'])
+        # Replaced former call: self.file_handler.exists(relative_path)
+        # by checking whether this filename with date last_update has already been downloaded
+        elif res:  # Exists
+            msg['method'] = 'file_loaded'
+        else:  # Continue to check..
+            # Download file to compute hash
+            content = self.req.session.get(url).content
+            # Compute content hash
+            content_hash = hashlib.sha1(content).hexdigest()
+
+            # Query db for hash
+            res = self.database.get_hash(content_hash)
+            if res:  # Exists
+                msg['method'] = 'file_loaded'
+            else:  # Continue to check..
+                res = self.database.get_name(relative_path)
+                if res:
+                    msg['method'] = 'file_update'
+                    relative_path = '{}_UP{}.{}'.format(relative_file, '_UPD_', content_hash[:4], '.', file_ending)
+                    msg['message'] = relative_path
+                else:
+                    msg['clrone'] = clr.BOLD
+                    exists = self.file_handler.exists(relative_path)
+                    msg['method'] = 'downloading' if not exists else 'overwriting'
+                    msg['message'] = '{} from {}'.format(relative_path, url)
+                saved = self.file_handler.save_file(relative_path, content)
+                if saved:
+                    self.database.insert(relative_path, content_hash, last_update)
+                    self.count += 1
+
         if msg['method'] == 'download' or self.logall:
-            self.changelog.append('{}: {}'.format(msg['method'], msg['messag']))
-        print(method)
+            self.changelog.append('{}: {}'.format(msg['method'], msg['message']))
+
+        util.print_method(msg['method'], msg['message'], msg['clrone'], msg['clrtwo'])
 
     def write_changelog(self):
         """Write a changelog to /chosen_dir/.changelog/changelog_{datetime}."""
@@ -214,28 +233,16 @@ class Crawler:
               is_flag=True,
               help='Upload files using the Dropbox API.'
               ' Requires a Dropbox API token.')
-@click.option('-c',
-              '--comphash',
-              is_flag=True,
-              help='Compare downloaded files by their sha1 hashvalue. '
-              'Use this if you intend to . '
-              'The performance will be worse because every file has'
-              ' to be downloaded to compute its hashvalue.')
 @click.option('-l',
               '--logall',
               is_flag=True,
               help='Log everything to the changelog, not just downloads.')
 @click.option('-m', '--mail', is_flag=True, help='Send an email if there are new downloads.')
-@click.option('--maxsize',
+@click.option('-x', '--maxsize',
               default=5E7,
               help='Define the maximum size of a file to be downloaded.')
-@click.option('-s',
-              '--store',
-              is_flag=True,
-              help='Store credentials (in plaintext).'
-              ' Can also be used to overwrite stored information.')
-def cli(comphash, dropbox, logall, mail, maxsize, store):
-    crawler = Crawler(comphash, dropbox, logall, mail, maxsize)
+def cli(dropbox, logall, mail, maxsize):
+    crawler = Crawler(dropbox, logall, mail, maxsize)
     try:
         crawler.run()
     except KeyboardInterrupt as kie:

@@ -16,16 +16,27 @@ class Database:
         self.db_folder_path = curr + DATABASE_FOLDER
         self.db_path = curr + DATABASE_PATH
         self.setup(file_handler, dropbox)
+
         self.db = TinyDB(self.db_path)
-        self.file = Query()
 
-    def insert(self, filename, filehash):
+    def insert(self, filepath, filehash, fileupdate):
         """"""
-        self.db.insert({'name': filename, 'hashvalue': filehash})
+        self.db.insert({'path': filepath, 'hashvalue': filehash, 'lastupdate': fileupdate})
 
-    def get(self, filehash):
+    def get_hash(self, filehash):
         """"""
-        return self.db.search(self.file.hashvalue == filehash)
+        file = Query()
+        return self.db.search(file.hashvalue == filehash)
+
+    def get_name(self, filepath):
+        """"""
+        file = Query()
+        return self.db.search(file.path == filepath)
+
+    def get_name_update(self, filename, fileupdate):
+        """"""
+        file = Query()
+        return self.db.search((file.path == filename) & (file.lastupdate == fileupdate))
 
     def setup(self, file_handler, dropbox):
         """"""
@@ -39,7 +50,7 @@ class Database:
             # Database is saved in Dropbox
             # Download it to working dir
             if dropbox:
-                file_handler.download_file_to(DATABASE_PATH, self.db_path)
+                file_handler.download_file(DATABASE_PATH, self.db_path)
             # Database file is saved locally
             # Copy it to working dir
             else:
@@ -52,7 +63,7 @@ class Database:
         if regular:
             if dropbox:
                 with open(self.db_path, 'rb') as f:
-                    file_handler.save_file(DATABASE_PATH, f.read())
+                    file_handler.save_file(DATABASE_PATH, f.read(), overwrite=True)
             else:
                 dest = file_handler.base_path + DATABASE_PATH
                 shutil.copyfile(self.db_path, dest)

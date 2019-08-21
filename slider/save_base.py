@@ -5,6 +5,8 @@ from abc import ABC, abstractmethod
 
 class BaseSaver(ABC):
     """"""
+    OVERW_FOLDER = '.overwritten/'
+
     def __init__(self, base_path):
         self.base_path = util.bpath(base_path)
 
@@ -19,6 +21,6 @@ class BaseSaver(ABC):
         pass
 
     @abstractmethod
-    def save_file(self, relative_path, content):
+    def save_file(self, relative_path, content, overwrite=False):
         """Save the file."""
         pass

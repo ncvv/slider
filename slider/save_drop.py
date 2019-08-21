@@ -38,11 +38,14 @@ class DropboxSaver(BaseSaver):
             path = util.dbpath(self.base_path + util.rpath(relative_path))
             self.dbx.files_create_folder_v2(path=path, autorename=False)
 
-    def save_file(self, relative_path, content):
+    def save_file(self, relative_path, content, overwrite=False):
         """Save the file in Dropbox by uploading it with the Dropbox API."""
+        path = util.dbpath(self.base_path + util.rpath(relative_path))
+        file_size = len(content)
+
         try:
-            path = util.dbpath(self.base_path + util.rpath(relative_path))
-            file_size = len(content)
+            if self.exists(relative_path) and not overwrite:
+                self.move_file(relative_path, BaseSaver.OVERW_FOLDER + relative_path)
 
             # If file exceeds CHUNK_SIZE, upload in smaller chunks
             if int(file_size) > CHUNK_SIZE:
@@ -59,17 +62,24 @@ class DropboxSaver(BaseSaver):
                         self.dbx.files_upload_session_append(file.read(CHUNK_SIZE), cursor.session_id,
                                                              cursor.offset)
                         cursor.offset = file.tell()
-            
+
             # File is uploaded as a whole
             else:
                 self.dbx.files_upload(content, path, mute=False)
                 return True
-        #
+
         except ApiError as err:
             sys.stderr.write('Failed to upload to {}\n{}\n'.format(path, err))
             return False
 
-    def download_file_to(self, relative_download_path, destination_path):
+    def move_file(self, relative_from_path, relative_to_path):
+        """"""
+        from_path = util.dbpath(self.base_path + util.rpath(relative_from_path))
+        to_path = util.dbpath(self.base_path + util.rpath(relative_to_path))
+        self.dbx.files_move(from_path, to_path)
+
+    def download_file(self, relative_download_path, destination_path):
+        """"""
         down = util.dbpath(self.base_path + util.rpath(relative_download_path))
         with open(destination_path, 'wb') as f:
             metadata, res = self.dbx.files_download(down)

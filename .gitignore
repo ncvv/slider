@@ -8,4 +8,4 @@ __pycache__/
 # Project
 _other/
 logs/
-secrets.py
+app_secrets.py
