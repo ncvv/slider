@@ -6,7 +6,6 @@ import hashlib
 import mimetypes
 import os
 import re
-import shutil
 import sys
 
 from bs4 import BeautifulSoup
@@ -29,8 +28,9 @@ except ImportError:
     if not os.path.exists(SECRETS_FILE):
         util.create_secrets(SECRETS_FILE)
     else:
-        print('app_secrets file is malformed. Please start over.')
-        shutil.rm(SECRETS_FILE)
+        print(SECRETS_FILE + ' file is malformed or missing.')
+        print('Please start again from the <repo>/slider/ dir.')
+        os.remove(SECRETS_FILE)
         sys.exit(1)
 
 
@@ -43,9 +43,11 @@ class Crawler:
         self.maxsize = maxsize
 
         if self.dropbox:
+            assert secrets.PATH_IN_DB != ''
             self.save_path = secrets.PATH_IN_DB
             self.file_handler = DropboxSaver(self.save_path, secrets.DROPBOX_TOKEN)
         else:
+            assert secrets.PATH != ''
             self.save_path = secrets.PATH
             self.file_handler = FileSaver(self.save_path)
 
@@ -69,7 +71,11 @@ class Crawler:
             return restr
 
     def run(self):
-        """Main entry point."""
+        """Main entry point.
+
+        Authenticate the client, crawl the courses, persist the results,
+        write a changelog and optionally send a mail with the results.
+        """
         # authentication
         try:
             response = self.req.login()
@@ -78,9 +84,8 @@ class Crawler:
             print(err, 'A ConnectionError occurred. Please check your internet connection.', sep='\n')
             sys.exit(1)
 
-        # check whether authentication worked;
-        # has to be done this way since HTTP response
-        # on failed authentication is 200 - OK.
+        # check whether authentication worked; has to be done this way
+        # since HTTP response on failed authentication is 200 - OK.
         auth_failed_msg = 'Anmeldedaten wurden nicht akzeptiert'
         if auth_failed_msg in html_text:
             print('Authorization failed. Please maintain user and password correctly.')
@@ -90,7 +95,7 @@ class Crawler:
         self.crawl(html_text)
 
         # wrap up: close database, write changelog and send mail
-        self.database.close(self.file_handler, self.dropbox, True)
+        self.database.close(self.file_handler, self.dropbox)
         self.write_changelog()
         if self.sendmail and self.downloads:
             self.req.send_mail(self, self.downloads)
@@ -228,7 +233,7 @@ class Crawler:
                 saved = self.file_handler.save_file(relative_path, content)
                 if saved:
                     self.database.insert(relative_path, content_hash, last_update)
-                    self.downloads.append(relative_path)
+                    self.downloads.append(method + ': ' + relative_path)
 
         if method != ('file_skiped' and 'loaded_once') or self.logall:
             self.changelog.append(str(method + ': ' + messag))
@@ -244,7 +249,7 @@ class Crawler:
         tmp += str(len(tmp) * '-') + '\n'
         tmp += '\n'.join(self.changelog) + '\n'
         b = tmp.encode('utf-8')
-        self.file_handler.save_file(CHLOG_FOLDER + 'changelog_{}.txt'.format(d), b, mute=True)
+        self.file_handler.save_file(CHLOG_FOLDER + 'changelog_{}.txt'.format(d), b, True)
 
 
 @click.command()
@@ -253,9 +258,12 @@ class Crawler:
 @click.option('-m', '--mail', is_flag=True, help='Send an email if there are new downloads.')
 @click.option('-x', '--maxsize', default=5E7, help='Define the maximum size of a file to be downloaded.')
 def cli(dropbox, logall, mail, maxsize):
-    crawler = Crawler(dropbox, logall, mail, maxsize)
     try:
+        crawler = Crawler(dropbox, logall, mail, maxsize)
         crawler.run()
+    except AssertionError:
+        print('AssertionError.', 'Please maintain the required settings in ' + SECRETS_FILE, sep='\n')
+        sys.exit(1)
     except KeyboardInterrupt as kie:
         print(kie, '\n', clr.BOLD, clr.RED, 'KeyboardInterrupt. Crawler terminated.', clr.ENDC, sep='')
         sys.exit(1)
