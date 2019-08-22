@@ -1,4 +1,4 @@
-""""""
+"""Module for local file system saving."""
 
 import os
 import shutil
@@ -8,7 +8,7 @@ import util
 
 
 class FileSaver(BaseSaver):
-    """"""
+    """A class for operations on files, handling the interaction with the local filesystem."""
     def __init__(self, base_path):
         super().__init__(base_path)
 

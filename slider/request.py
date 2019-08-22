@@ -3,7 +3,6 @@
 from datetime import datetime
 import re
 import smtplib
-import urllib.parse
 
 import requests
 
@@ -40,14 +39,13 @@ class RequestHandler:
             '_eventId': 'submit',
             'submit': 'Anmelden'
         }
-        url = urllib.parse.quote_plus(ILIAS_URL)
-        response = self.session.post(url, data=payload, cookies=cookies)
+        response = self.session.post(ILIAS_URL, data=payload, cookies=cookies)
         return response
 
     def send_mail(self, subject, new_lst):
-        """Send an email via Uni Mannheim smtp server.
-           Content of the mail in new_lst is every
-           new academic record since last run of the program."""
+        """Send an email via Uni Mannheim smtp server. Content of the
+           mail in new_lst is every new academic record since last run
+           of the program."""
         # mail headers
         headers = {
             'Content-Type': 'text/plain; charset=utf-8',
@@ -56,7 +54,7 @@ class RequestHandler:
             'From': self.mail,
             'To': self.mail,
             'Date': datetime.now().strftime('%a, %d %b %Y  %H:%M:%S %Z'),
-            'Subject': str(subject)
+            'Subject': 'Ilias@UniMa: ' + str(subject)
         }
 
         # mail content

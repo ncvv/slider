@@ -1,4 +1,4 @@
-""""""
+"""Base class module for file saving functionalities."""
 
 import util
 
@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 
 
 class BaseSaver(ABC):
-    """"""
+    """An abstract base class for saving files."""
     OVERW_FOLDER = '.overwritten/'
 
     def __init__(self, base_path):

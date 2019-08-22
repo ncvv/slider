@@ -5,7 +5,7 @@ import sys
 
 
 class Colors:
-    """"""
+    """A color class with constants."""
     BOLD = '\033[1m'
     LIGHTGREY = '\033[37m'
     RED = '\033[31m'
@@ -55,7 +55,7 @@ def remove_edge_characters(line):
 
 
 def print_method(method, messag, clrone=Colors.ENDC, clrtwo=Colors.ENDC):
-    """"""
+    """PrettyPrint the file handling method."""
     print('{}{}:{} {}'.format(clrone, method, clrtwo, messag))
 
 

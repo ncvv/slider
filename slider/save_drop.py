@@ -1,4 +1,4 @@
-""""""
+"""Module for Dropbox file saving."""
 
 import io
 import sys
@@ -14,9 +14,10 @@ CHUNK = 32 * 1024 * 1024
 
 
 class DropboxSaver(BaseSaver):
-    """"""
+    """A class for operations on files, handling the interaction with Dropbox."""
     def __init__(self, base_path, token):
         super().__init__(base_path)
+        assert token != ''
         self.token = token
         self.dbx = dropbox.Dropbox(token, timeout=180)
 
@@ -49,13 +50,14 @@ class DropboxSaver(BaseSaver):
         file_size = len(content)
         large_file = file_size > CHUNK
 
+        # handle potential overwriting
         if not overwrite:  # default
             upload_mode = dropbox.files.WriteMode.add
         else:  # allow overwriting
             upload_mode = dropbox.files.WriteMode.overwrite
 
-        # if file exists and it should not be overwritten or is a large file
-        # move it to the overwritten folder to avoid overwriting it
+        # if file exists and it should not be overwritten or it is a large file
+        # move it to the overwritten folder to avoid overwriting the existing file
         if self.exists(relative_path) and (not overwrite or large_file):
             try:
                 self.move_file(relative_path, BaseSaver.OVERW_FOLDER + relative_path)
@@ -64,8 +66,13 @@ class DropboxSaver(BaseSaver):
                 return False
 
         try:
-            # if file exceeds CHUNK, upload in smaller chunks
-            if large_file:
+            # file is uploaded as a whole
+            if not large_file:
+                self.dbx.files_upload(content, path, mute=mute, mode=upload_mode)
+                return True
+
+            # file exceeds size CHUNK, upload in smaller chunks
+            else:
                 f = io.BytesIO(content)
                 result = self.dbx.files_upload_session_start(f.read(CHUNK))
                 cursor = dropbox.files.UploadSessionCursor(session_id=result.session_id, offset=f.tell())
@@ -79,24 +86,23 @@ class DropboxSaver(BaseSaver):
                         self.dbx.files_upload_session_append(f.read(CHUNK), cursor.session_id, cursor.offset)
                         cursor.offset = f.tell()
 
-            # file is uploaded as a whole
-            else:
-                self.dbx.files_upload(content, path, mute=mute, mode=upload_mode)
-                return True
-
         except ApiError as err:
             print('Uploading {} failed due to:\n{}\n'.format(path, err))
             return False
 
     def move_file(self, relative_from_path, relative_to_path):
-        """"""
-        from_path = util.dbpath(self.base_path + util.rpath(relative_from_path))
-        to_path = util.dbpath(self.base_path + util.rpath(relative_to_path))
-        self.dbx.files_move(from_path, to_path, autorename=True)
+        """Move a file from relative_from_path to relative_to_path."""
+        fr = util.dbpath(self.base_path + util.rpath(relative_from_path))
+        to = util.dbpath(self.base_path + util.rpath(relative_to_path))
+        self.dbx.files_move(fr, to, autorename=True)
 
     def download_file(self, relative_download_path, destination_path):
-        """"""
+        """Download a file located at relative_download_path and
+           save it at destination_path."""
         down = util.dbpath(self.base_path + util.rpath(relative_download_path))
-        with open(destination_path, 'wb') as f:
+        dest = destination_path
+
+        # download file
+        with open(dest, 'wb') as f:
             metadata, res = self.dbx.files_download(down)
             f.write(res.content)
